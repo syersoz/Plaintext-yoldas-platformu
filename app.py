@@ -331,27 +331,17 @@ else:
                 bot_reply = None
                 last_err = None
 
-                # Hesabın erişebildiği tüm modelleri dinamik olarak al
-                try:
-                    available_models = [
-                        m.name for m in genai.list_models()
-                        if 'generateContent' in m.supported_generation_methods
-                    ]
-                except Exception as list_err:
-                    available_models = []
-                    last_err = list_err
-
-               target_models = [
+                target_models = [
                     "models/gemini-3.8-flash",
                     "gemini-3.8-flash",
                     "models/gemini-2.0-flash",
                     "models/gemini-1.5-flash"
                 ]
 
-                for candidate in models_to_try:
+                for mod_name in target_models:
                     try:
                         model = genai.GenerativeModel(
-                            model_name=candidate,
+                            model_name=mod_name,
                             system_instruction=sys_prompt
                         )
                         response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
@@ -369,4 +359,3 @@ else:
                     err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({last_err})"
                     st.markdown(err_msg)
                     save_message(current_user_id, "default", "assistant", err_msg)
-                
