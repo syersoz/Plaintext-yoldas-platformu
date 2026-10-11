@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 import datetime
 import json
+import os
 from google import genai
 from google.genai import types
 
@@ -64,14 +65,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- GEMINI CLIENT -----------------
+# ----------------- GEMINI CLIENT VE API ANAHTARI KONTROLÜ -----------------
 @st.cache_resource
 def get_gemini_client():
-    try:
+    api_key = None
+    if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        api_key = None
-    return genai.Client(api_key=api_key)
+    elif "gemini_api_key" in st.secrets:
+        api_key = st.secrets["gemini_api_key"]
+    elif os.environ.get("GEMINI_API_KEY"):
+        api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        return None
+    
+    clean_key = str(api_key).strip().strip("'").strip('"')
+    return genai.Client(api_key=clean_key)
 
 client = get_gemini_client()
 
@@ -102,7 +111,7 @@ def init_db():
         )
     ''')
 
-    # Eski veya eksik sütunları otomatik ekle (OperationalError önleme)
+    # Eksik sütun kontrolü ve migrasyon
     existing_cols = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
     needed_cols = {
         "nick_name": "TEXT",
@@ -202,7 +211,7 @@ def get_all_users():
     conn.close()
     return [dict(r) for r in rows]
 
-# ----------------- OTURUM VE KULLANICI AYRIŞTIRMA (İZOLASYON) -----------------
+# ----------------- OTURUM VE KULLANICI İZOLASYONU -----------------
 params = st.query_params
 
 if "u" not in params:
@@ -214,7 +223,7 @@ else:
 
 current_user = get_user(current_user_id)
 
-# ----------------- SOL PANEL (YÖNETİCİ & DURUM) -----------------
+# ----------------- SOL PANEL (YÖNETİCİ GİRİŞİ) -----------------
 with st.sidebar:
     st.markdown("### 🤝 Yoldaş Menüsü")
     admin_expander = st.expander("⚙️ Ebeveyn / Yönetici Girişi", expanded=False)
@@ -261,7 +270,6 @@ with st.sidebar:
 
 # ----------------- ANA EKRAN: KAYIT VEYA SOHBET -----------------
 if not current_user:
-    # YENİ KULLANICI KAYIT EKRANI
     st.markdown("## 🤝 Yoldaş'a Hoş Geldin")
     st.caption("Kendine samimi bir yol arkadaşı seç, birlikte hedeflere yürüyün.")
 
@@ -312,7 +320,6 @@ if not current_user:
                 st.rerun()
 
 else:
-    # AKTİF SOHBET EKRANI (TAM İZOLE)
     comp_name = current_user.get('companion_name', 'Yoldaş')
     user_nick = current_user.get('nick_name', 'Dostum')
     
@@ -339,9 +346,9 @@ else:
         Gizli Yönetici Yönlendirmesi: {current_user.get('admin_guidance', 'Yok')}.
 
         KURALLAR:
-        1. Asla robotik veya klişe konuşma. Mert, içten, bilgece ve doğal bir Türkçe kullan.
-        2. SADECE VE SADECE bu kullanıcının bu anlattığı konuya odaklan.
-        3. Kullanıcı ne söylüyorsa doğrudan onu anladığını hissettirerek taze bir cevap ver.
+        1. Asla robotik veya klişe konuşma. Mert, samimi, bilgece ve doğal bir Türkçe kullan.
+        2. SADECE VE SADECE kullanıcının az önce yazdığı mesaja odaklan.
+        3. Kullanıcı ne söylüyorsa doğrudan onu anladığını hissettirerek yanıt ver.
         4. Cevapların çok uzun olmasın (1-2 paragraf), sohbet akışını koru.
         """
 
@@ -351,19 +358,24 @@ else:
             gecmis_diyalog += f"{kim}: {m['content']}\n"
 
         with st.chat_message("assistant"):
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=f"{gecmis_diyalog}\n{comp_name}:",
-                    config=types.GenerateContentConfig(
-                        system_instruction=sys_prompt,
-                        temperature=0.7
-                    )
-                )
-                bot_reply = response.text
-                st.markdown(bot_reply)
-                save_message(current_user_id, "default", "assistant", bot_reply)
-            except Exception as e:
-                err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({e})"
-                st.markdown(err_msg)
+            if not client:
+                err_msg = "⚠️ API Anahtarı eksik veya geçersiz! Lütfen Streamlit ayarlarından (Secrets) GEMINI_API_KEY değerini kontrol edin."
+                st.error(err_msg)
                 save_message(current_user_id, "default", "assistant", err_msg)
+            else:
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=f"{gecmis_diyalog}\n{comp_name}:",
+                        config=types.GenerateContentConfig(
+                            system_instruction=sys_prompt,
+                            temperature=0.7
+                        )
+                    )
+                    bot_reply = response.text
+                    st.markdown(bot_reply)
+                    save_message(current_user_id, "default", "assistant", bot_reply)
+                except Exception as e:
+                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? (Hata detayı: {e})"
+                    st.markdown(err_msg)
+                    save_message(current_user_id, "default", "assistant", err_msg)
