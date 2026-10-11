@@ -2,10 +2,8 @@ import streamlit as st
 import sqlite3
 import uuid
 import datetime
-import json
 import os
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # ----------------- SAYFA AYARLARI -----------------
 st.set_page_config(
@@ -29,7 +27,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA TAM DÜZELTME */
+    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA DÜZELTMESİ */
     [data-testid="stChatInput"] {
         background-color: #161b22 !important;
         border: 1px solid rgba(255, 255, 255, 0.25) !important;
@@ -49,25 +47,12 @@ st.markdown("""
     [data-testid="stChatInput"] button {
         color: #ffffff !important;
     }
-
-    .badge-pill {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        margin-bottom: 8px;
-    }
-    .badge-namaz { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
-    .badge-dil { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
-    .badge-streak { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
     .stButton>button { border-radius: 8px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- GEMINI CLIENT VE API ANAHTARI KONTROLÜ -----------------
-@st.cache_resource
-def get_gemini_client():
+# ----------------- GEMINI API YAPILANDIRMASI -----------------
+def init_gemini():
     api_key = None
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -80,17 +65,12 @@ def get_gemini_client():
         return None
     
     clean_key = str(api_key).strip().strip("'").strip('"')
-    os.environ["GEMINI_API_KEY"] = clean_key
-    
-    # 401 hatasını engellemek için doğrudan API Key ile istemci başlatma
-    return genai.Client(
-        api_key=clean_key,
-        http_options=types.HttpOptions(api_version="v1beta")
-    )
+    genai.configure(api_key=clean_key)
+    return True
 
-client = get_gemini_client()
+gemini_ready = init_gemini()
 
-# ----------------- VERİTABANI YÖNETİMİ & OTOMATİK MİGRASYON -----------------
+# ----------------- VERİTABANI YÖNETİMİ -----------------
 DB_FILE = "yoldas_veritabani.db"
 
 def init_db():
@@ -116,25 +96,13 @@ def init_db():
             created_at TIMESTAMP
         )
     ''')
-
-    # Eksik sütun kontrolü ve migrasyon
     existing_cols = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
     needed_cols = {
-        "nick_name": "TEXT",
-        "real_name": "TEXT",
-        "age_group": "TEXT",
-        "hitap": "TEXT",
-        "companion_name": "TEXT",
-        "companion_stance": "TEXT",
-        "daily_goal": "TEXT",
-        "reward": "TEXT",
-        "namaz_tracking": "INTEGER",
-        "namaz_streak": "INTEGER",
-        "target_language": "TEXT",
-        "language_level": "TEXT",
-        "discovered_interests": "TEXT",
-        "admin_guidance": "TEXT",
-        "created_at": "TIMESTAMP"
+        "nick_name": "TEXT", "real_name": "TEXT", "age_group": "TEXT", "hitap": "TEXT",
+        "companion_name": "TEXT", "companion_stance": "TEXT", "daily_goal": "TEXT",
+        "reward": "TEXT", "namaz_tracking": "INTEGER", "namaz_streak": "INTEGER",
+        "target_language": "TEXT", "language_level": "TEXT", "discovered_interests": "TEXT",
+        "admin_guidance": "TEXT", "created_at": "TIMESTAMP"
     }
     for col_name, col_type in needed_cols.items():
         if col_name not in existing_cols:
@@ -217,9 +185,8 @@ def get_all_users():
     conn.close()
     return [dict(r) for r in rows]
 
-# ----------------- OTURUM VE KULLANICI İZOLASYONU -----------------
+# ----------------- OTURUM YÖNETİMİ -----------------
 params = st.query_params
-
 if "u" not in params:
     new_uid = str(uuid.uuid4())[:8]
     st.query_params["u"] = new_uid
@@ -229,7 +196,7 @@ else:
 
 current_user = get_user(current_user_id)
 
-# ----------------- SOL PANEL (YÖNETİCİ GİRİŞİ) -----------------
+# ----------------- SOL MENÜ -----------------
 with st.sidebar:
     st.markdown("### 🤝 Yoldaş Menüsü")
     admin_expander = st.expander("⚙️ Ebeveyn / Yönetici Girişi", expanded=False)
@@ -248,7 +215,7 @@ with st.sidebar:
                 st.markdown(f"**Keşfedilen İlgi Alanları:** {sel_u.get('discovered_interests', '-')}")
                 st.markdown(f"**Hedef Dil:** {sel_u.get('target_language', '-')}")
 
-                new_guidance = st.text_area("Yoldaş'a Gizli Yönlendirme (Görünmez Talimat)", sel_u.get('admin_guidance', ''))
+                new_guidance = st.text_area("Yoldaş'a Gizli Yönlendirme", sel_u.get('admin_guidance', ''))
                 if st.button("Talimatı Kaydet"):
                     sel_u['admin_guidance'] = new_guidance
                     save_user(sel_u)
@@ -274,7 +241,7 @@ with st.sidebar:
             st.query_params.clear()
             st.rerun()
 
-# ----------------- ANA EKRAN: KAYIT VEYA SOHBET -----------------
+# ----------------- ANA EKRAN -----------------
 if not current_user:
     st.markdown("## 🤝 Yoldaş'a Hoş Geldin")
     st.caption("Kendine samimi bir yol arkadaşı seç, birlikte hedeflere yürüyün.")
@@ -320,7 +287,6 @@ if not current_user:
                     "created_at": datetime.datetime.now().isoformat()
                 }
                 save_user(new_u)
-                
                 welcome_msg = f"Selam {nick}! Ben {new_u['companion_name']}. Yol arkadaşın olarak buradayım. Bugün aklında ne var, nereden başlamak istersin?"
                 save_message(current_user_id, "default", "assistant", welcome_msg)
                 st.rerun()
@@ -334,8 +300,7 @@ else:
 
     messages = get_messages(current_user_id, "default")
     for msg in messages:
-        role = msg["role"]
-        with st.chat_message(role):
+        with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("İçini dök veya bir soru sor..."):
@@ -352,8 +317,8 @@ else:
         Gizli Yönetici Yönlendirmesi: {current_user.get('admin_guidance', 'Yok')}.
 
         KURALLAR:
-        1. Asla robotik veya klişe konuşma. Mert, samimi, bilgece ve doğal bir Türkçe kullan.
-        2. SADECE VE SADECE kullanıcının az önce yazdığı mesaja odaklan.
+        1. Robotik veya klişe konuşma. Mert, samimi, bilgece ve doğal bir Türkçe kullan.
+        2. SADECE VE SADECE kullanıcının yazdığı mesaja odaklan.
         3. Kullanıcı ne söylüyorsa doğrudan onu anladığını hissettirerek yanıt ver.
         4. Cevapların çok uzun olmasın (1-2 paragraf), sohbet akışını koru.
         """
@@ -364,24 +329,21 @@ else:
             gecmis_diyalog += f"{kim}: {m['content']}\n"
 
         with st.chat_message("assistant"):
-            if not client:
-                err_msg = "⚠️ API Anahtarı eksik veya geçersiz! Lütfen Streamlit ayarlarından (Secrets) GEMINI_API_KEY değerini kontrol edin."
+            if not gemini_ready:
+                err_msg = "⚠️ API Anahtarı eksik! Lütfen Streamlit Secrets alanına GEMINI_API_KEY değerini ekleyin."
                 st.error(err_msg)
                 save_message(current_user_id, "default", "assistant", err_msg)
             else:
                 try:
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=f"{gecmis_diyalog}\n{comp_name}:",
-                        config=types.GenerateContentConfig(
-                            system_instruction=sys_prompt,
-                            temperature=0.7
-                        )
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-flash",
+                        system_instruction=sys_prompt
                     )
+                    response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
                     bot_reply = response.text
                     st.markdown(bot_reply)
                     save_message(current_user_id, "default", "assistant", bot_reply)
                 except Exception as e:
-                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? (Hata detayı: {e})"
+                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? (Hata: {e})"
                     st.markdown(err_msg)
                     save_message(current_user_id, "default", "assistant", err_msg)
