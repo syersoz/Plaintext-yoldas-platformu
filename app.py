@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ----------------- ÖZEL TASARIM VE CSS (MOBİL UYUMLU) -----------------
+# ----------------- ÖZEL CSS (KOYU TEMA & MOBİL GİRİŞ DÜZELTMESİ) -----------------
 st.markdown("""
 <style>
     .stApp {
@@ -27,7 +27,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA DÜZELTMESİ */
+    /* YAZI GİRİŞ KUTUSU MOBİL VE OKUNURLUK DÜZELTMESİ */
     [data-testid="stChatInput"] {
         background-color: #161b22 !important;
         border: 1px solid rgba(255, 255, 255, 0.25) !important;
@@ -51,24 +51,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- GEMINI API YAPILANDIRMASI -----------------
-def init_gemini():
-    api_key = None
+# ----------------- GEMINI API BAĞLANTISI -----------------
+def get_api_key():
     if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
+        return str(st.secrets["GEMINI_API_KEY"]).strip().strip("'").strip('"')
     elif "gemini_api_key" in st.secrets:
-        api_key = st.secrets["gemini_api_key"]
+        return str(st.secrets["gemini_api_key"]).strip().strip("'").strip('"')
     elif os.environ.get("GEMINI_API_KEY"):
-        api_key = os.environ.get("GEMINI_API_KEY")
+        return os.environ.get("GEMINI_API_KEY").strip().strip("'").strip('"')
+    return None
 
-    if not api_key:
-        return None
-    
-    clean_key = str(api_key).strip().strip("'").strip('"')
-    genai.configure(api_key=clean_key)
-    return True
-
-gemini_ready = init_gemini()
+api_key = get_api_key()
+if api_key:
+    genai.configure(api_key=api_key)
 
 # ----------------- VERİTABANI YÖNETİMİ -----------------
 DB_FILE = "yoldas_veritabani.db"
@@ -185,7 +180,7 @@ def get_all_users():
     conn.close()
     return [dict(r) for r in rows]
 
-# ----------------- OTURUM YÖNETİMİ -----------------
+# ----------------- KULLANICI AYRIŞTIRMA (İZOLASYON) -----------------
 params = st.query_params
 if "u" not in params:
     new_uid = str(uuid.uuid4())[:8]
@@ -196,7 +191,7 @@ else:
 
 current_user = get_user(current_user_id)
 
-# ----------------- SOL MENÜ -----------------
+# ----------------- YÖNETİCİ PANELİ (SOL MENÜ) -----------------
 with st.sidebar:
     st.markdown("### 🤝 Yoldaş Menüsü")
     admin_expander = st.expander("⚙️ Ebeveyn / Yönetici Girişi", expanded=False)
@@ -212,7 +207,7 @@ with st.sidebar:
                 sel_u = get_user(sel_id)
 
                 st.markdown(f"**Gerçek Adı:** {sel_u.get('real_name', 'Bilinmiyor')}")
-                st.markdown(f"**Keşfedilen İlgi Alanları:** {sel_u.get('discovered_interests', '-')}")
+                st.markdown(f"**İlgi Alanları:** {sel_u.get('discovered_interests', '-')}")
                 st.markdown(f"**Hedef Dil:** {sel_u.get('target_language', '-')}")
 
                 new_guidance = st.text_area("Yoldaş'a Gizli Yönlendirme", sel_u.get('admin_guidance', ''))
@@ -222,7 +217,7 @@ with st.sidebar:
                     st.toast("Yönlendirme güncellendi!")
 
                 st.markdown("---")
-                st.markdown("#### Sohbet Kayıtları")
+                st.markdown("#### Sohbet Geçmişi")
                 admin_msgs = get_messages(sel_id, "default")
                 for m in admin_msgs:
                     st.caption(f"**{m['role'].upper()}:** {m['content']}")
@@ -309,7 +304,7 @@ else:
             st.markdown(prompt)
 
         sys_prompt = f"""
-        Sen 'Yoldaş' rehberisin. Adın: {comp_name}.
+        Sen 'Yoldaş' platformundaki kişisel rehbersin. Adın: {comp_name}.
         Kullanıcı: {user_nick}, Hitap Şekli: {current_user.get('hitap', 'Dostum')}.
         Duruşun: {current_user.get('companion_stance', 'Şefkatli bir dinleyici')}.
         Günün Odak Hedefi: {current_user.get('daily_goal')}.
@@ -317,10 +312,9 @@ else:
         Gizli Yönetici Yönlendirmesi: {current_user.get('admin_guidance', 'Yok')}.
 
         KURALLAR:
-        1. Robotik veya klişe konuşma. Mert, samimi, bilgece ve doğal bir Türkçe kullan.
-        2. SADECE VE SADECE kullanıcının yazdığı mesaja odaklan.
-        3. Kullanıcı ne söylüyorsa doğrudan onu anladığını hissettirerek yanıt ver.
-        4. Cevapların çok uzun olmasın (1-2 paragraf), sohbet akışını koru.
+        1. Robotik ve kalıp cümleler kurma. Mert, içten, samimi ve doğal bir Türkçe ile konuş.
+        2. Kullanıcının az önce yazdığı mesaja odaklan ve doğrudan onu cevapla.
+        3. Yanıtların çok uzun olmasın (1-2 paragraf), akıcı sohbet havasında kal.
         """
 
         gecmis_diyalog = ""
@@ -329,21 +323,41 @@ else:
             gecmis_diyalog += f"{kim}: {m['content']}\n"
 
         with st.chat_message("assistant"):
-            if not gemini_ready:
-                err_msg = "⚠️ API Anahtarı eksik! Lütfen Streamlit Secrets alanına GEMINI_API_KEY değerini ekleyin."
+            if not api_key:
+                err_msg = "⚠️ API Anahtarı eksik! Lütfen Streamlit Secrets alanına GEMINI_API_KEY ekleyin."
                 st.error(err_msg)
                 save_message(current_user_id, "default", "assistant", err_msg)
             else:
-                try:
-                    model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash-latest",
-                        system_instruction=sys_prompt
-                    )
-                    response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
-                    bot_reply = response.text
+                bot_reply = None
+                last_err = None
+                
+                # API ve model adı uyumsuzluklarını önlemek için sırayla dener
+                candidate_models = [
+                    "gemini-2.5-flash",
+                    "gemini-2.0-flash",
+                    "gemini-1.5-flash-latest",
+                    "gemini-1.5-flash",
+                    "gemini-pro"
+                ]
+
+                for candidate in candidate_models:
+                    try:
+                        model = genai.GenerativeModel(
+                            model_name=candidate,
+                            system_instruction=sys_prompt
+                        )
+                        response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
+                        bot_reply = response.text
+                        if bot_reply:
+                            break
+                    except Exception as e:
+                        last_err = e
+                        continue
+
+                if bot_reply:
                     st.markdown(bot_reply)
                     save_message(current_user_id, "default", "assistant", bot_reply)
-                except Exception as e:
-                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? (Hata: {e})"
+                else:
+                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({last_err})"
                     st.markdown(err_msg)
                     save_message(current_user_id, "default", "assistant", err_msg)
