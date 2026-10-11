@@ -332,55 +332,45 @@ else:
                 save_message(current_user_id, "default", "assistant", err_msg)
             else:
                 bot_reply = None
-                # Doğrudan çalışan modele bağlanıp hızlı streaming yapıyoruz
-                try:
-                    model = genai.GenerativeModel(
-                        model_name="models/gemini-2.0-flash",
-                        system_instruction=sys_prompt,
-                        generation_config={
-                            "temperature": 0.7,
-                            "max_output_tokens": 400
-                        }
-                    )
-                    response = model.generate_content(
-                        f"{gecmis_diyalog}\n{comp_name}:",
-                        stream=True
-                    )
+                last_err = None
 
-                    def stream_generator():
-                        for chunk in response:
-                            if chunk.text:
-                                yield chunk.text
+                # 20 istek kuralına takılmayan, ücretsiz planda günlük 1500 istek hakkı olan hızlı modeller
+                reliable_models = [
+                    "models/gemini-2.0-flash",
+                    "gemini-2.0-flash",
+                    "models/gemini-2.5-flash",
+                    "gemini-2.5-flash"
+                ]
 
-                    bot_reply = st.write_stream(stream_generator)
-                    if bot_reply:
-                        save_message(current_user_id, "default", "assistant", bot_reply)
-
-                except Exception:
-                    # Gerekirse doğrudan çalışan ikinci model
+                for mod_name in reliable_models:
                     try:
-                        fallback_model = genai.GenerativeModel(
-                            model_name="models/gemini-3.8-flash",
+                        model = genai.GenerativeModel(
+                            model_name=mod_name,
                             system_instruction=sys_prompt,
                             generation_config={
                                 "temperature": 0.7,
                                 "max_output_tokens": 400
                             }
                         )
-                        response = fallback_model.generate_content(
+                        response = model.generate_content(
                             f"{gecmis_diyalog}\n{comp_name}:",
                             stream=True
                         )
 
-                        def stream_gen():
+                        def stream_generator():
                             for chunk in response:
                                 if chunk.text:
                                     yield chunk.text
 
-                        bot_reply = st.write_stream(stream_gen)
+                        bot_reply = st.write_stream(stream_generator)
                         if bot_reply:
                             save_message(current_user_id, "default", "assistant", bot_reply)
-                    except Exception as err2:
-                        err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({err2})"
-                        st.markdown(err_msg)
-                        save_message(current_user_id, "default", "assistant", err_msg)
+                            break
+                    except Exception as e:
+                        last_err = e
+                        continue
+
+                if not bot_reply:
+                    err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({last_err})"
+                    st.markdown(err_msg)
+                    save_message(current_user_id, "default", "assistant", err_msg)
