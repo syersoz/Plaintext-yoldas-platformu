@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ----------------- ÖZEL CSS (KOYU TEMA & KUSURSUZ YAZI GİRİŞİ) -----------------
+# ----------------- ÖZEL CSS (KOYU TEMA & KESİN CHAT INPUT RENKLERİ) -----------------
 st.markdown("""
 <style>
     .stApp {
@@ -27,28 +27,28 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ KUTUSU (CHAT INPUT) - ULTRA OKUNABİLİR VE NET */
-    [data-testid="stChatInput"] {
-        background-color: #1e2530 !important;
-        border: 2px solid #3b82f6 !important;
+    /* YAZI GİRİŞ ALANI (CHAT INPUT) - TÜM KATMANLARI VE ARKA PLANI KESİN DEĞİŞTİRME */
+    div[data-testid="stChatInput"], 
+    div[data-testid="stChatInput"] > div,
+    div[data-testid="stChatInput"] form {
+        background-color: #1e293b !important;
+        border: 2px solid #38bdf8 !important;
         border-radius: 14px !important;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
     }
-    [data-testid="stChatInput"] textarea {
+    div[data-testid="stChatInput"] textarea {
+        background-color: transparent !important;
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
-        caret-color: #60a5fa !important;
-        background-color: transparent !important;
+        caret-color: #38bdf8 !important;
         font-size: 16px !important;
         font-weight: 500 !important;
     }
-    [data-testid="stChatInput"] textarea::placeholder {
+    div[data-testid="stChatInput"] textarea::placeholder {
         color: #94a3b8 !important;
         -webkit-text-fill-color: #94a3b8 !important;
-        font-weight: 400 !important;
     }
-    [data-testid="stChatInput"] button {
-        color: #60a5fa !important;
+    div[data-testid="stChatInput"] button {
+        color: #38bdf8 !important;
     }
     .stButton>button { border-radius: 8px; font-weight: 600; }
 </style>
@@ -334,16 +334,15 @@ else:
                 bot_reply = None
                 last_err = None
 
-                # Doğrudan çalışan modeller (hızlı akış için en uygun olanlar)
-                models_to_run = [
-                    "gemini-2.5-flash",
-                    "models/gemini-2.5-flash",
-                    "gemini-2.0-flash",
+                # Yeni hesaplar için doğrudan çalışan güncel modeller
+                active_models = [
+                    "models/gemini-3.8-flash",
+                    "gemini-3.8-flash",
                     "models/gemini-2.0-flash",
-                    "gemini-1.5-flash"
+                    "gemini-2.0-flash"
                 ]
 
-                for mod_name in models_to_run:
+                for mod_name in active_models:
                     try:
                         model = genai.GenerativeModel(
                             model_name=mod_name,
