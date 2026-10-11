@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ----------------- ÖZEL CSS (KOYU TEMA & MOBİL GİRİŞ DÜZELTMESİ) -----------------
+# ----------------- ÖZEL CSS (KOYU TEMA & KUSURSUZ YAZI GİRİŞİ) -----------------
 st.markdown("""
 <style>
     .stApp {
@@ -27,25 +27,28 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ KUTUSU MOBİL VE OKUNURLUK DÜZELTMESİ */
+    /* YAZI GİRİŞ KUTUSU (CHAT INPUT) - ULTRA OKUNABİLİR VE NET */
     [data-testid="stChatInput"] {
-        background-color: #161b22 !important;
-        border: 1px solid rgba(255, 255, 255, 0.25) !important;
-        border-radius: 12px !important;
+        background-color: #1e2530 !important;
+        border: 2px solid #3b82f6 !important;
+        border-radius: 14px !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
     }
     [data-testid="stChatInput"] textarea {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
-        caret-color: #ffffff !important;
+        caret-color: #60a5fa !important;
         background-color: transparent !important;
         font-size: 16px !important;
+        font-weight: 500 !important;
     }
     [data-testid="stChatInput"] textarea::placeholder {
-        color: rgba(255, 255, 255, 0.6) !important;
-        -webkit-text-fill-color: rgba(255, 255, 255, 0.6) !important;
+        color: #94a3b8 !important;
+        -webkit-text-fill-color: #94a3b8 !important;
+        font-weight: 400 !important;
     }
     [data-testid="stChatInput"] button {
-        color: #ffffff !important;
+        color: #60a5fa !important;
     }
     .stButton>button { border-radius: 8px; font-weight: 600; }
 </style>
@@ -331,31 +334,40 @@ else:
                 bot_reply = None
                 last_err = None
 
-                target_models = [
-                    "models/gemini-3.8-flash",
-                    "gemini-3.8-flash",
+                # Doğrudan çalışan modeller (hızlı akış için en uygun olanlar)
+                models_to_run = [
+                    "gemini-2.5-flash",
+                    "models/gemini-2.5-flash",
+                    "gemini-2.0-flash",
                     "models/gemini-2.0-flash",
-                    "models/gemini-1.5-flash"
+                    "gemini-1.5-flash"
                 ]
 
-                for mod_name in target_models:
+                for mod_name in models_to_run:
                     try:
                         model = genai.GenerativeModel(
                             model_name=mod_name,
                             system_instruction=sys_prompt
                         )
-                        response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
-                        if response and response.text:
-                            bot_reply = response.text
+                        response = model.generate_content(
+                            f"{gecmis_diyalog}\n{comp_name}:",
+                            stream=True
+                        )
+
+                        def stream_generator():
+                            for chunk in response:
+                                if chunk.text:
+                                    yield chunk.text
+
+                        bot_reply = st.write_stream(stream_generator)
+                        if bot_reply:
+                            save_message(current_user_id, "default", "assistant", bot_reply)
                             break
                     except Exception as e:
                         last_err = e
                         continue
 
-                if bot_reply:
-                    st.markdown(bot_reply)
-                    save_message(current_user_id, "default", "assistant", bot_reply)
-                else:
+                if not bot_reply:
                     err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({last_err})"
                     st.markdown(err_msg)
                     save_message(current_user_id, "default", "assistant", err_msg)
