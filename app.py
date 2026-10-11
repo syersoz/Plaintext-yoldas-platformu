@@ -10,7 +10,22 @@ from google.genai import types
 st.set_page_config(page_title="Yoldaş", page_icon="🤝", layout="wide")
 
 st.markdown("""
-<style>
+</* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA DÜZELTMESİ */
+    [data-testid="stChatInput"] {
+        background-color: #161b22 !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        caret-color: #ffffff !important;
+        font-size: 16px !important;
+    }
+    [data-testid="stChatInput"] textarea::placeholder {
+        color: rgba(255, 255, 255, 0.6) !important;
+        -webkit-text-fill-color: rgba(255, 255, 255, 0.6) !important;
+    }>
     .stApp {
         background: linear-gradient(135deg, #0b0e14 0%, #161b22 100%);
         color: #e6edf3;
