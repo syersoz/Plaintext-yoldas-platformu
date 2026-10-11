@@ -330,25 +330,44 @@ else:
             else:
                 bot_reply = None
                 last_err = None
-                
-                # API ve model adı uyumsuzluklarını önlemek için sırayla dener
-                candidate_models = [
+
+                # Hesabın erişebildiği tüm modelleri dinamik olarak al
+                try:
+                    available_models = [
+                        m.name for m in genai.list_models()
+                        if 'generateContent' in m.supported_generation_methods
+                    ]
+                except Exception as list_err:
+                    available_models = []
+                    last_err = list_err
+
+                # Öncelikli modeller listesi
+                priority_order = [
+                    "models/gemini-2.5-flash",
+                    "models/gemini-2.0-flash",
+                    "models/gemini-1.5-flash-latest",
+                    "models/gemini-1.5-flash",
+                    "models/gemini-1.5-pro",
                     "gemini-2.5-flash",
-                    "gemini-2.0-flash",
-                    "gemini-1.5-flash-latest",
-                    "gemini-1.5-flash",
-                    "gemini-pro"
+                    "gemini-1.5-flash"
                 ]
 
-                for candidate in candidate_models:
+                # Erişilebilir modelleri öncelik sırasına göre düzenle
+                models_to_try = [m for m in priority_order if m in available_models]
+                if not models_to_try and available_models:
+                    models_to_try = available_models
+                elif not models_to_try:
+                    models_to_try = priority_order
+
+                for candidate in models_to_try:
                     try:
                         model = genai.GenerativeModel(
                             model_name=candidate,
                             system_instruction=sys_prompt
                         )
                         response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
-                        bot_reply = response.text
-                        if bot_reply:
+                        if response and response.text:
+                            bot_reply = response.text
                             break
                     except Exception as e:
                         last_err = e
@@ -361,3 +380,4 @@ else:
                     err_msg = f"Dostum seni dinliyorum, mesajını tam alamadım. Tekrar söyler misin? ({last_err})"
                     st.markdown(err_msg)
                     save_message(current_user_id, "default", "assistant", err_msg)
+                
