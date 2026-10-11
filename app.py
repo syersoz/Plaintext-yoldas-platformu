@@ -336,7 +336,7 @@ else:
             else:
                 try:
                     model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash",
+                        model_name="gemini-1.5-flash-latest",
                         system_instruction=sys_prompt
                     )
                     response = model.generate_content(f"{gecmis_diyalog}\n{comp_name}:")
