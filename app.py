@@ -28,7 +28,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA TAM DÜZELTME */
+    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA DÜZELTMESİ */
     [data-testid="stChatInput"] {
         background-color: #161b22 !important;
         border: 1px solid rgba(255, 255, 255, 0.25) !important;
@@ -67,7 +67,6 @@ st.markdown("""
 # ----------------- GEMINI CLIENT -----------------
 @st.cache_resource
 def get_gemini_client():
-    # Streamlit Secrets veya yedek anahtar
     try:
         api_key = st.secrets["GEMINI_API_KEY"]
     except Exception:
@@ -76,7 +75,7 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
-# ----------------- VERİTABANI YÖNETİMİ -----------------
+# ----------------- VERİTABANI YÖNETİMİ & OTOMATİK MİGRASYON -----------------
 DB_FILE = "yoldas_veritabani.db"
 
 def init_db():
@@ -102,6 +101,33 @@ def init_db():
             created_at TIMESTAMP
         )
     ''')
+
+    # Eski veya eksik sütunları otomatik ekle (OperationalError önleme)
+    existing_cols = [col[1] for col in c.execute("PRAGMA table_info(users)").fetchall()]
+    needed_cols = {
+        "nick_name": "TEXT",
+        "real_name": "TEXT",
+        "age_group": "TEXT",
+        "hitap": "TEXT",
+        "companion_name": "TEXT",
+        "companion_stance": "TEXT",
+        "daily_goal": "TEXT",
+        "reward": "TEXT",
+        "namaz_tracking": "INTEGER",
+        "namaz_streak": "INTEGER",
+        "target_language": "TEXT",
+        "language_level": "TEXT",
+        "discovered_interests": "TEXT",
+        "admin_guidance": "TEXT",
+        "created_at": "TIMESTAMP"
+    }
+    for col_name, col_type in needed_cols.items():
+        if col_name not in existing_cols:
+            try:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+            except Exception:
+                pass
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -138,10 +164,10 @@ def save_user(u):
             discovered_interests, admin_guidance, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        u['id'], u['nick_name'], u['real_name'], u['age_group'], u['hitap'],
-        u['companion_name'], u['companion_stance'], u['daily_goal'], u['reward'],
-        u['namaz_tracking'], u['namaz_streak'], u['target_language'], u['language_level'],
-        u['discovered_interests'], u['admin_guidance'], u.get('created_at', datetime.datetime.now().isoformat())
+        u['id'], u.get('nick_name', ''), u.get('real_name', ''), u.get('age_group', ''), u.get('hitap', ''),
+        u.get('companion_name', ''), u.get('companion_stance', ''), u.get('daily_goal', ''), u.get('reward', ''),
+        u.get('namaz_tracking', 0), u.get('namaz_streak', 0), u.get('target_language', ''), u.get('language_level', ''),
+        u.get('discovered_interests', ''), u.get('admin_guidance', ''), u.get('created_at', datetime.datetime.now().isoformat())
     ))
     conn.commit()
     conn.close()
@@ -177,10 +203,8 @@ def get_all_users():
     return [dict(r) for r in rows]
 
 # ----------------- OTURUM VE KULLANICI AYRIŞTIRMA (İZOLASYON) -----------------
-# URL parametrelerini al
 params = st.query_params
 
-# Eğer URL'de bir kullanıcı ID yoksa, bu tarayıcıya özel sıfır bir ID üret
 if "u" not in params:
     new_uid = str(uuid.uuid4())[:8]
     st.query_params["u"] = new_uid
@@ -199,7 +223,7 @@ with st.sidebar:
         if pin == "1453":
             st.success("Yönetici Yetkisi Doğrulandı")
             all_users = get_all_users()
-            user_options = {u['nick_name'] + f" ({u['id']})": u['id'] for u in all_users}
+            user_options = {u.get('nick_name', 'İsimsiz') + f" ({u['id']})": u['id'] for u in all_users}
             if user_options:
                 selected_user_label = st.selectbox("İncelenecek Kullanıcı", list(user_options.keys()))
                 sel_id = user_options[selected_user_label]
@@ -283,7 +307,6 @@ if not current_user:
                 }
                 save_user(new_u)
                 
-                # Karşılama mesajı kaydet
                 welcome_msg = f"Selam {nick}! Ben {new_u['companion_name']}. Yol arkadaşın olarak buradayım. Bugün aklında ne var, nereden başlamak istersin?"
                 save_message(current_user_id, "default", "assistant", welcome_msg)
                 st.rerun()
@@ -296,21 +319,17 @@ else:
     st.markdown(f"### 🤝 {comp_name} ile Yolculuk")
     st.caption(f"Yol arkadaşın seni dinliyor, {user_nick}.")
 
-    # Geçmiş mesajları ekrana bas (Sadece bu kullanıcıya ait)
     messages = get_messages(current_user_id, "default")
     for msg in messages:
         role = msg["role"]
         with st.chat_message(role):
             st.markdown(msg["content"])
 
-    # Yeni mesaj girişi
     if prompt := st.chat_input("İçini dök veya bir soru sor..."):
-        # 1. Kullanıcı mesajını kaydet ve göster
         save_message(current_user_id, "default", "user", prompt)
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # 2. Sistem talimatı oluştur
         sys_prompt = f"""
         Sen 'Yoldaş' rehberisin. Adın: {comp_name}.
         Kullanıcı: {user_nick}, Hitap Şekli: {current_user.get('hitap', 'Dostum')}.
@@ -326,13 +345,11 @@ else:
         4. Cevapların çok uzun olmasın (1-2 paragraf), sohbet akışını koru.
         """
 
-        # 3. Yalnızca bu kullanıcının geçmişini hazırla
         gecmis_diyalog = ""
         for m in get_messages(current_user_id, "default"):
             kim = "Kullanıcı" if m["role"] == "user" else comp_name
             gecmis_diyalog += f"{kim}: {m['content']}\n"
 
-        # 4. Yanıt üret ve ekrana yaz
         with st.chat_message("assistant"):
             try:
                 response = client.models.generate_content(
