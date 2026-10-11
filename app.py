@@ -341,23 +341,12 @@ else:
                     available_models = []
                     last_err = list_err
 
-                # Öncelikli modeller listesi
-                priority_order = [
-                    "models/gemini-2.5-flash",
+               target_models = [
+                    "models/gemini-3.8-flash",
+                    "gemini-3.8-flash",
                     "models/gemini-2.0-flash",
-                    "models/gemini-1.5-flash-latest",
-                    "models/gemini-1.5-flash",
-                    "models/gemini-1.5-pro",
-                    "gemini-2.5-flash",
-                    "gemini-1.5-flash"
+                    "models/gemini-1.5-flash"
                 ]
-
-                # Erişilebilir modelleri öncelik sırasına göre düzenle
-                models_to_try = [m for m in priority_order if m in available_models]
-                if not models_to_try and available_models:
-                    models_to_try = available_models
-                elif not models_to_try:
-                    models_to_try = priority_order
 
                 for candidate in models_to_try:
                     try:
