@@ -29,7 +29,7 @@ st.markdown("""
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA DÜZELTMESİ */
+    /* YAZI GİRİŞ ALANI (CHAT INPUT) MOBİL & KOYU TEMA TAM DÜZELTME */
     [data-testid="stChatInput"] {
         background-color: #161b22 !important;
         border: 1px solid rgba(255, 255, 255, 0.25) !important;
@@ -80,7 +80,13 @@ def get_gemini_client():
         return None
     
     clean_key = str(api_key).strip().strip("'").strip('"')
-    return genai.Client(api_key=clean_key)
+    os.environ["GEMINI_API_KEY"] = clean_key
+    
+    # 401 hatasını engellemek için doğrudan API Key ile istemci başlatma
+    return genai.Client(
+        api_key=clean_key,
+        http_options=types.HttpOptions(api_version="v1beta")
+    )
 
 client = get_gemini_client()
 
